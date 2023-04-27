@@ -2,12 +2,15 @@
 pragma solidity ^0.8.16;
 
 import "@jbx-protocol/juice-721-delegate/contracts/abstract/JB721Delegate.sol";
+import "@jbx-protocol/juice-721-delegate/contracts/abstract/Votes.sol";
 import "./interfaces/IJB721StakingDelegate.sol";
 
-contract JB721StakingDelegate is
-    JB721Delegate,
-    IJB721StakingDelegate
-{
+contract JB721StakingDelegate is Votes, JB721Delegate, IJB721StakingDelegate {
+    //*********************************************************************//
+    // --------------------------- custom errors ------------------------- //
+    //*********************************************************************//
+    error INVALID_TOKEN();
+
     //*********************************************************************//
     // --------------------- public stored properties -------------------- //
     //*********************************************************************//
@@ -16,6 +19,21 @@ contract JB721StakingDelegate is
       The address of the origin 'JB721StakingDelegate', used to check in the init if the contract is the original or not
     */
     address public override codeOrigin;
+
+    /**
+     * @dev A mapping of staked token balances per id
+     */
+    mapping(uint256 => uint256) public stakingTokenBalance;
+
+    /**
+     * @dev A mapping of (current) voting power for the users
+     */
+    mapping(address => uint256) public userVotingPower;
+
+    /**
+     * @notice
+     */
+    uint256 public numberOfTokensMinted;
 
     /**
       @notice
@@ -30,6 +48,40 @@ contract JB721StakingDelegate is
     //*********************************************************************//
     // -------------------------- public views --------------------------- //
     //*********************************************************************//
+
+    /** 
+    @notice
+    The cumulative weight the given token IDs have in redemptions compared to the `totalRedemptionWeight`. 
+
+    @param _tokenIds The IDs of the tokens to get the cumulative redemption weight of.
+
+    @return _value The weight.
+  */
+    function redemptionWeightOf(
+        uint256[] memory _tokenIds,
+        JBRedeemParamsData calldata
+    ) public view virtual override returns (uint256 _value) {
+        uint256 _nOfTokens = _tokenIds.length;
+        for (uint256 _i; _i < _nOfTokens; ) {
+            unchecked {
+                // Add the staked value that the nft represents
+                // and increment the loop
+                _value += stakingTokenBalance[_tokenIds[_i++]];
+            }
+        }
+    }
+
+    /** 
+    @notice
+    The cumulative weight that all token IDs have in redemptions. 
+
+    @return The total weight.
+  */
+    function totalRedemptionWeight(
+        JBRedeemParamsData calldata
+    ) public view virtual override returns (uint256) {
+        return _getTotalSupply();
+    }
 
     /**
       @notice
@@ -55,5 +107,70 @@ contract JB721StakingDelegate is
 
     constructor() {
         codeOrigin = address(this);
+    }
+
+    //*********************************************************************//
+    // ------------------------ internal functions ----------------------- //
+    //*********************************************************************//
+
+    /** 
+    @notice
+    Process a received payment.
+
+    @param _data The Juicebox standard project payment data.
+  */
+    function _processPayment(
+        JBDidPayData calldata _data
+    ) internal virtual override {
+        uint256 _tokenId;
+
+        // Increment the counter (which also reports the total number minted)
+        unchecked {
+            _tokenId = ++numberOfTokensMinted;
+        }
+
+        // Track how much this NFT is worth
+        stakingTokenBalance[_tokenId] = _data.amount.value;
+
+        // Mint the token.
+        _mint(_data.beneficiary, _tokenId);
+    }
+
+    /**
+    @notice
+    The voting units for an account from its NFTs across all tiers. NFTs have a tier-specific preset number of voting units. 
+
+    @param _account The account to get voting units for.
+
+    @return units The voting units for the account.
+  */
+    function _getVotingUnits(
+        address _account
+    ) internal view virtual override returns (uint256 units) {
+        return userVotingPower[_account];
+    }
+
+    /**
+    @notice
+    Transfer voting units after the transfer of a token.
+
+    @param _from The address where the transfer is originating.
+    @param _to The address to which the transfer is being made.
+    @param _tokenId The ID of the token being transferred.
+   */
+    function _afterTokenTransfer(
+        address _from,
+        address _to,
+        uint256 _tokenId
+    ) internal virtual override {
+        uint256 _stakingValue = stakingTokenBalance[_tokenId];
+
+        if (_from != address(0)) userVotingPower[_from] -= _stakingValue;
+        if (_to != address(0)) userVotingPower[_to] += _stakingValue;
+
+        // Transfer the voting units.
+        _transferVotingUnits(_from, _to, _stakingValue);
+
+        super._afterTokenTransfer(_from, _to, _tokenId);
     }
 }
