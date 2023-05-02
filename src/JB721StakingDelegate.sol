@@ -109,6 +109,22 @@ contract JB721StakingDelegate is Votes, JB721Delegate, IJB721StakingDelegate {
         codeOrigin = address(this);
     }
 
+    function initialize(
+        uint256 _projectId,
+        IJBDirectory _directory,
+        string memory _name,
+        string memory _symbol
+    ) external {
+        // Make the original un-initializable.
+        if (address(this) == codeOrigin) revert();
+
+        // Stop re-initialization.
+        if (projectId != 0) revert();
+
+        // Initialize the superclass.
+        JB721Delegate._initialize(_projectId, _directory, _name, _symbol);
+    }
+
     //*********************************************************************//
     // ------------------------ internal functions ----------------------- //
     //*********************************************************************//
@@ -131,6 +147,8 @@ contract JB721StakingDelegate is Votes, JB721Delegate, IJB721StakingDelegate {
 
         // Track how much this NFT is worth
         stakingTokenBalance[_tokenId] = _data.amount.value;
+
+        // TODO: Add tokenUri stuff
 
         // Mint the token.
         _mint(_data.beneficiary, _tokenId);
