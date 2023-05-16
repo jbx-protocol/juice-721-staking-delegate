@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.16;
 
+import "@jbx-protocol/juice-contracts-v3/contracts/interfaces/IJBTokenUriResolver.sol";
 import "@jbx-protocol/juice-721-delegate/contracts/abstract/JB721Delegate.sol";
+import "@jbx-protocol/juice-721-delegate/contracts/libraries/JBIpfsDecoder.sol";
 import "@jbx-protocol/juice-721-delegate/contracts/abstract/Votes.sol";
 import "./interfaces/IJB721StakingDelegate.sol";
 
@@ -39,7 +41,28 @@ contract JB721StakingDelegate is Votes, JB721Delegate, IJB721StakingDelegate {
       @notice
       The contract that stores and manages the NFT's data.
     */
-    IJB721StakingDelegateStore public override store;
+    IJBTokenUriResolver public uriResolver;
+
+    /**
+     * @notice
+     * Contract metadata uri.
+     * 
+     */
+    string public contractURI;
+
+    /**
+     * @notice
+     * The common base for the tokenUri's
+     * 
+     */
+    string public baseURI;
+
+    /**
+     * @notice
+     * encoded baseURI to be used when no token resolver provided
+     * 
+     */
+    bytes32 public encodedIPFSUri;
 
     //*********************************************************************//
     // ------------------------- external views -------------------------- //
@@ -113,8 +136,12 @@ contract JB721StakingDelegate is Votes, JB721Delegate, IJB721StakingDelegate {
     function initialize(
         uint256 _projectId,
         IJBDirectory _directory,
+        IJBTokenUriResolver _uriResolver,
         string memory _name,
-        string memory _symbol
+        string memory _symbol,
+        string memory _contractURI,
+        string memory _baseURI,
+        bytes32 _encodedIPFSUri
     ) external {
         // Make the original un-initializable.
         if (address(this) == codeOrigin) revert();
@@ -122,8 +149,35 @@ contract JB721StakingDelegate is Votes, JB721Delegate, IJB721StakingDelegate {
         // Stop re-initialization.
         if (projectId != 0) revert();
 
+        uriResolver = _uriResolver;
+
+        contractURI = _contractURI;
+
+        encodedIPFSUri = _encodedIPFSUri;
+
+        baseURI = _baseURI;
+
         // Initialize the superclass.
         JB721Delegate._initialize(_projectId, _directory, _name, _symbol);
+    }
+
+    /**
+     * @notice
+     * The metadata URI of the provided token ID.
+     * 
+     * @dev
+     * Defer to the tokenUriResolver if set, otherwise, use the tokenUri set with the token's tier.
+     * 
+     * @param _tokenId The ID of the token to get the tier URI for. 
+     * 
+     * @return The token URI corresponding with the tier or the tokenUriResolver URI.
+     */
+    function tokenURI(uint256 _tokenId) public view override returns (string memory) {
+        // If a token URI resolver is provided, use it to resolve the token URI.
+        if (address(uriResolver) != address(0)) return uriResolver.getUri(_tokenId);
+
+        // Return the token URI for the token's tier.
+        return JBIpfsDecoder.decode(baseURI, encodedIPFSUri);
     }
 
     //*********************************************************************//

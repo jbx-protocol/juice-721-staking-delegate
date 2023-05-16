@@ -26,13 +26,17 @@ contract JB721StakingDelegateDeployer {
     function deploy(
         uint256 _projectId,
         IJBDirectory _directory,
+        IJBTokenUriResolver _uriResolver,
         string memory _name,
-        string memory _symbol
+        string memory _symbol,
+        string memory _contractURI,
+        string memory _baseURI,
+        bytes32 _encodedIPFSUri
     ) external returns (JB721StakingDelegate newDelegate) {
         newDelegate = JB721StakingDelegate(
             Clones.clone(address(delegateImplementation))
         );
 
-        newDelegate.initialize(_projectId, _directory, _name, _symbol);
+        newDelegate.initialize(_projectId, _directory, _uriResolver, _name, _symbol, _contractURI, _baseURI, _encodedIPFSUri);
     }
 }

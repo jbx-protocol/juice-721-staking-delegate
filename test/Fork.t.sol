@@ -75,8 +75,12 @@ contract EmptyTest_Fork is Test {
         ).deploy(
             projectId,
             JBDirectory,
+            IJBTokenUriResolver(address(0)),
             "JBXStake",
-            "STAKE"
+            "STAKE",
+            "",
+            "",
+            bytes32('0')
         );
 
         // Deploy a new terminal for the project token
